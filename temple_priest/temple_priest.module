@@ -1,0 +1,571 @@
+<?php
+/**
+ * @file
+ * Code for the temple priest feature.
+ */
+
+include_once 'temple_priest.features.inc';
+
+function temple_priest_form_priest_schedule_node_form_alter(&$form, &$form_state, $form_id) {
+  $form['field_timings']['und'][0]['show_repeat_settings']['#default_value'] = TRUE;
+  $form['field_timings']['und'][0]['show_repeat_settings']['#prefix'] = '<div style="display:none;" >';
+  $form['field_timings']['und'][0]['show_repeat_settings']['#suffix'] = '</div>';
+  $form['actions']['submit']['#submit'][] = 'temple_priest_form_priest_schedule_node_form_custom_submit';
+}
+
+function temple_priest_date_popup_process_alter(&$element, &$form_state, $context) {
+
+}
+
+function temple_priest_form_priest_schedule_node_form_custom_submit($form, &$form_state) {
+	global $user;
+	//echo $form_state['build_info']['args'][0]->field_priest_user['und'][0]['uid'];
+	//$selected_priest_detaila = user_load($form_state['build_info']['args'][0]->field_priest_user['und'][0]['uid']);    
+	
+	
+	//$node->title = $form_state['build_info']['args'][0]->title.'('.$selected_priest_detaila->name.')';
+	
+	   // $form_state['build_info']['args'][0]->title = $form_state['build_info']['args'][0]->title.'('.$selected_priest_detaila->name.')';  	
+		//$form_state['build_info']['args'][0]->title = 'my testing details';
+	if (in_array('temple admin', $user->roles)) {
+		$form_state['redirect'] = 'priest-scheduler-all';
+	} else {
+		$form_state['redirect'] = 'priest-scheduler';
+	}	
+}
+
+function temple_priest_form_alter(&$form, &$form_state, $form_id) {
+	//echo "<pre>";
+	//print_r($form); exit();
+	//echo $form_id; exit();
+  if($form_id = "node_admin_content") {
+	  $options = $form['filter']['filters']['status']['filters']['type']['#options'];
+	 // echo $form['filter']['filters']['status']['filters']['type']['#options']['audio_gallery'];
+	   unset($form['filter']['filters']['status']['filters']['type']['#options']['audio_gallery']);
+	   unset($form['filter']['filters']['status']['filters']['type']['#options']['news']);
+	   unset($form['filter']['filters']['status']['filters']['type']['#options']['hall']);
+	   unset($form['filter']['filters']['status']['filters']['type']['#options']['article']);
+	   unset($form['filter']['filters']['status']['filters']['type']['#options']['page']);
+	   unset($form['filter']['filters']['status']['filters']['type']['#options']['management']);
+	   unset($form['filter']['filters']['status']['filters']['type']['#options']['pooja_prices_list']);
+	   unset($form['filter']['filters']['status']['filters']['type']['#options']['priest_schedule']);
+	   unset($form['filter']['filters']['status']['filters']['type']['#options']['simplenews']);
+	   unset($form['filter']['filters']['status']['filters']['type']['#options']['festivals']);
+
+  }
+  if ($form_id == "commerce_product_ui_product_form") {
+    $form['actions']['submit']['#submit'][] = 'commerce_product_ui_product_form_submit_custom_alter';
+  }
+ /* if($form_id == "commerce_checkout_form_checkout") {
+	  //echo "<pre>";
+	  //print_r($form); exit();
+	  //$form['customer_profile_billing']['field_phone_number']['und'][0]['#weight']=1;    	 
+	  $form['customer_profile_billing']['commerce_customer_address']['und'][0]['country']['#weight']=20;  
+       
+  }*/
+  if ($form_id == "pooja_prices_list_node_form") {
+    $form['actions']['submit']['#submit'][] = 'temple_priest_form_pooja_prices_list_form_custom_submit';
+  }
+  /*if ($form_id == "priest_schedule_node_form") {
+    $form['actions']['submit']['#submit'][] = 'priest_schedule_custom_submit';
+  }*/
+  
+}
+/*
+function priest_schedule_custom_submit($form, &$form_state) {
+	echo "<pre>";
+	print_r($form_state);exit();
+}*/
+function temple_priest_form_pooja_prices_list_form_custom_submit($form, &$form_state) {
+  if (isset($form_state['inline_entity_form']) && is_array($form_state['inline_entity_form'])) {
+    $key = key($form_state['inline_entity_form']);
+    foreach($form_state['inline_entity_form'][$key]['entities'] as $entity_item) {
+      $entity_item = $entity_item['entity'];
+      try {
+        $query = db_query("select item_id from {commerce_pricelist_item} where sku = :sku", array(":sku" => $entity_item->sku));
+        foreach($query as $items) {
+          commerce_pricelist_item_delete($items->item_id);
+        }
+      } catch(Exception $e) {
+        
+      }
+      try {
+        $entity = array();
+        $entity['sku'] = $entity_item->sku;
+        $entity['quantity'] = 1;
+        $entity['price_amount'] = $entity_item->commerce_price['und'][0]['amount'];
+        $entity['currency_code'] = $entity_item->commerce_price['und'][0]['currency_code'];
+        $entity['pricelist_id'] = '2';
+        $entity = (object) $entity;
+        commerce_pricelist_item_save($entity);
+        $price = 0;
+        if (isset($entity_item->field_member_price['und']) && !empty($entity_item->field_member_price['und'])) {
+          $price = $entity_item->field_member_price['und'][0]['value'] * 100;
+        }
+        else {
+          $price = $entity_item->commerce_price['und'][0]['amount'];
+        }
+        $entity = array();
+        $entity['sku'] = $entity_item->sku;
+        $entity['quantity'] = 1;
+        $entity['price_amount'] = $price;
+        $entity['currency_code'] = $entity_item->commerce_price['und'][0]['currency_code'];
+        $entity['pricelist_id'] = '1';
+        $entity = (object) $entity;
+        commerce_pricelist_item_save($entity);
+      } catch(Exception $e) {
+        
+      }
+    }
+  }
+ // $form_state['redirect'] = 'pooja-price-list';    
+}
+
+function commerce_product_ui_product_form_submit_custom_alter($form, &$form_state) {
+  try {
+    $query = db_query("select item_id from {commerce_pricelist_item} where sku = :sku", array(":sku" => $form_state['values']['sku']));
+    foreach($query as $items) {
+      commerce_pricelist_item_delete($items->item_id);
+    }
+  } catch(Exception $e) {
+    
+  }
+  try {
+    $entity = array();
+    $entity['sku'] = $form_state['values']['sku'];
+    $entity['quantity'] = 1;
+    $entity['price_amount'] = $form_state['values']['commerce_price']['und'][0]['amount'];
+    $entity['currency_code'] = $form_state['values']['commerce_price']['und'][0]['currency_code'];
+    $entity['pricelist_id'] = '2';
+    $entity = (object) $entity;
+    commerce_pricelist_item_save($entity);
+    $price = 0;
+    if (isset($form_state['values']['field_member_price']['und']) && !empty($form_state['values']['field_member_price']['und'])) {
+      $price = $form_state['values']['field_member_price']['und'][0]['value'] * 100;
+    }
+    else {
+      $price = $form_state['values']['commerce_price']['und'][0]['amount'];
+    }
+    $entity = array();
+    $entity['sku'] = $form_state['values']['sku'];
+    $entity['quantity'] = 1;
+    $entity['price_amount'] = $price;
+    $entity['currency_code'] = $form_state['values']['commerce_price']['und'][0]['currency_code'];
+    $entity['pricelist_id'] = '1';
+    $entity = (object) $entity;
+    commerce_pricelist_item_save($entity);
+  } catch(Exception $e) {
+    
+  }
+}
+
+function temple_priest_menu() {
+  $items['test-test'] = array(
+    'title' => 'Example Page',
+    'page callback' => 'test_test',
+    'access arguments' => array('access content'),
+  );
+  $items['temple'] = array(
+    'title' => 'Home Page',
+    'page callback' => 'temple_home',
+    'access arguments' => array('access content'),
+  );
+  $items['priest-delete/ajax/update/%/%'] = array(
+    'title' => 'Update event',
+    'description' => 'Save the updated event datetime.',
+    'page callback' => 'priest_delete_fullcalendar_update',
+    'page arguments' => array(3, 4),
+    'access callback' => '_fullcalendar_update_access',
+    'access arguments' => array(4),
+    'type' => MENU_CALLBACK,
+  );
+  	$items['priest-delete'] = array(
+    'title' => t('Delete Priest'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('event_delete_confirm', 2),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+   $items['event-cancel'] = array(
+      'page callback' => 'cancel_event',
+	   'access callback' => TRUE,
+    );
+  $items['event-cancel'] = array(
+    'page callback' => 'cancel_event',
+    'access callback' => TRUE,
+  );
+  $items['pooja/available-priest'] = array(
+    'page callback' => 'pooja_available_priest',
+    'access callback' => TRUE,
+  );
+  $items['team'] = array(
+    'page callback' => 'team',
+    'access callback' => TRUE,
+  );
+  $items['about-us'] = array(
+    'page callback' => 'about_us',
+    'access callback' => TRUE,
+  );
+  $items['events-details'] = array(
+    'page callback' => 'events_list',  
+    'access callback' => TRUE,
+  );
+  $items['membershiplist'] = array(
+    'page callback' => 'membershiplist',  
+    'access callback' => TRUE,
+  );
+  $items['nri-info'] = array(
+    'page callback' => 'nri_info',  
+    'access callback' => TRUE,
+  );
+  $items['immigration'] = array(
+    'page callback' => 'immigration',  
+    'access callback' => TRUE,
+  );
+  
+  return $items;
+}
+  
+function team() { 
+
+	//$output = "<img src = 'http://grtava.it-seva.in/sites/it-seva.in/files/Coming-Soon.png' style='width:900px; height:600px;'>";
+	$output = "<div class='executive_commitee'>";
+	$output .="<h3>2017 - 18 GRTA COMMITEE </h3>";
+	$output .= views_embed_view('team', 'block');
+	$output .="<div class='bg-line-vector'><div class='bg-line-bg'></div></div></div>";
+	
+	$output .= "<div class='extended_commitee'>";
+	$output .= views_embed_view('team','block_1');
+	$output .="<div class='bg-line-vector'><div class='bg-line-bg'></div></div></div>";
+	
+	$output .= "<div class='extended_commitee'>";
+	$output .= views_embed_view('team','block_2');
+	$output .="<div class='bg-line-vector'><div class='bg-line-bg'></div></div></div>";
+	
+	$output .= "<div class='extended_commitee'>";
+	$output .="<h3>Past Presidents</h3>";
+	$output .= views_embed_view('team','block_3');
+	$output .="</div>";
+	return $output;
+	
+}
+function about_us() {
+	$output = "<img src = 'http://grtava.org/sites/it-seva.in/files/Coming-Soon.png' style='width:900px; height:600px;'>";
+	return $output;
+	
+}
+function nri_info() {
+	$output = "<img src = 'http://grtava.org/sites/it-seva.in/files/Coming-Soon.png' style='width:900px; height:600px;'>";
+	return $output;
+	
+}
+function immigration() {
+	$output = "<img src = 'http://grtava.org/sites/it-seva.in/files/Coming-Soon.png' style='width:900px; height:600px;'>";
+	return $output;
+	
+}
+/*
+function sponsor() {
+	$output = "<img src = 'http://grtava.it-seva.in/sites/it-seva.in/files/Coming-Soon.png' style='width:900px; height:600px;'>";
+	return $output;
+	
+}
+*/
+function pooja_available_priest() {
+  $role = user_role_load_by_name('priest scheduler');
+  $uids = db_select('users_roles', 'ur')
+      ->fields('ur', array('uid'))
+      ->condition('ur.rid', $role->rid, '=')
+      ->execute()
+      ->fetchCol();
+  $user_uids = array();
+  foreach($uids as $uid) {
+    $user_uids[] = $uid;
+  }
+  $term = taxonomy_get_term_by_name("vacation");
+  $tid = array_shift($term)->tid;
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node')
+    ->entityCondition('bundle', 'priest_schedule')
+    ->propertyCondition('status', NODE_PUBLISHED)
+    ->fieldCondition('field_timings', 'value', '2017-02-26%', 'LIKE')
+    ->fieldCondition('field_status', 'tid', $tid);
+  $result = $query->execute();
+
+  foreach($result["node"] as $row) {
+    $user_uid = node_load($row->nid)->field_priest_user["und"][0]["uid"];
+    $key = array_search($user_uid, $user_uids);
+    $user_uids = array_except($user_uids, array($key));
+  }
+  $users = user_load_multiple($user_uids);
+  $json_array = array();
+  foreach($users as $user_data) {
+    $json_array[] = array(
+      "uid" => $user_data->uid,
+      "name" => $user_data->name,
+    );
+  }
+  echo json_encode(array("data" => $json_array));
+  exit();
+}
+
+function array_except($array, $keys) {
+  return array_diff_key($array, array_flip((array) $keys));   
+} 
+
+function priest_delete_fullcalendar_update($action, $eid) {
+  if (empty($_POST['field']) || !isset($_POST['index'])) {
+    return;
+  }
+
+  // Retrieve the post vars form the ajax call.
+  $field = check_plain($_POST['field']);
+  $index = check_plain($_POST['index']);
+
+  $all_day = isset($_POST['all_day']) ? check_plain($_POST['all_day']) : '';
+  $delta = ' ' . check_plain($_POST['day_delta']) . ' days ' . check_plain($_POST['minute_delta']) . ' minutes';
+  $entity_type = check_plain($_POST['entity_type']);
+  $entity = entity_load($entity_type, array($eid));
+  $entity = reset($entity);
+
+  $langcode = field_language($entity_type, $entity, $field);
+  $item = &$entity->{$field}[$langcode][$index];
+  $old_start = $item['value'];
+  $old_end = $item['value2'];
+
+  // Adjust for different date formats.
+  $format = date_type_format($item['date_type']);
+
+  // Datestamp can't combine with words for strtotime, convert to ISO for now.
+  if ($format == DATE_FORMAT_UNIX) {
+    $old_start = date(DATE_FORMAT_ISO, $old_start);
+    $old_end = date(DATE_FORMAT_ISO, $old_end);
+  }
+
+  // No break after 'drop' so it will reuse the code of 'resize'.
+  switch ($action) {
+    case 'drop':
+      $item['value'] = date($format, strtotime($old_start . $delta));
+    case 'resize':
+      $item['value2'] = date($format, strtotime($old_end . $delta));
+    case 'delete':
+      $entity = entity_load($entity_type, array($eid));
+      $entity = reset($entity);
+      unset($entity->{$field}[$langcode][$index]);
+      break;
+  }
+
+  // Save the new start/end values.
+  if (module_exists('entity')) {
+    entity_save($entity_type, $entity);
+  }
+  else {
+    field_attach_presave($entity_type, $entity);
+    field_attach_update($entity_type, $entity);
+  }
+
+  drupal_json_output(array('msg' => t('Priest Schedule time has been updated.') . ' [' . l(t('Close'), NULL, array('attributes' => array('class' => array('fullcalendar-status-close')))) . ']', 'dom_id' => $_POST['dom_id']));
+}
+
+
+function test_test($uid) {
+  global $user;
+  $user = user_load_by_mail($uid);
+  //$user = user_load($uid);
+  $uid = $user->uid;
+  $use_cart = TRUE;
+  $product_id = 963;
+    // First, see if there is already a cart for this user.
+  // Here we will not assume that commerce_cart is enabled.
+  if (module_exists('commerce_cart') && $use_cart) {
+    $order = commerce_cart_order_load($uid);
+  }
+
+  if (empty($order)) {
+    // Create the new order in checkout status.
+    $order = commerce_order_new($uid, 'checkout_checkout');
+
+    // Instead of using the default order type, we could also create an order of
+    // a custom order type defined by this module below.
+    // $order = commerce_order_new($uid, 'commerce_checkout', 'order_example_order_type');
+
+    // Save the order so its ID is assigned.
+    commerce_order_save($order);
+  }
+
+  // Load whatever product represents the item the customer will be
+  // paying for and create a line item for it.
+  $product = commerce_product_load($product_id);
+
+  // Create a line item with quantity 1 and this product.
+  $line_item = commerce_product_line_item_new($product, 1, $order->order_id);
+
+  // Save the line item to get its ID.
+  commerce_line_item_save($line_item);
+
+  // Add the line item to the order using the wrapper.
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  $order_wrapper->commerce_line_items[] = $line_item;
+
+  // Save the order again to update its line item reference field.
+  commerce_order_save($order);
+
+  echo $order->order_id;
+}
+function event_delete_confirm() {
+	//$_SESSION['mydata'] =  $_POST['priest_id'];
+	$form['name'] = array(
+    '#title' => t('Name'),
+    '#type' => 'hidden',
+    '#default_value' => variable_get(123,$_POST['priest_id']),
+);
+ 
+	return confirm_form($form,
+    	t('Are you sure you want to delete this Priest event'),
+    	isset($_GET['destination']) ? $_GET['destination'] : "event-cancel",
+    	t('This action cannot be undone.'),
+    	t('Delete'),
+    	t('Cancel'));
+}
+function event_delete_confirm_submit($form, &$form_state) {
+
+	if ($form_state['values']['confirm']) {
+ 
+		delete_event($form['name']['#value']);			
+ 
+		drupal_set_message(t('Priest Event has been deleted successfully.'));
+  	}
+ 
+	drupal_goto("priest-scheduler/reports/delete");
+}
+function delete_event($priestid) {
+	$select_priestuser_id = db_query("SELECT * FROM field_data_field_priest_user  WHERE field_priest_user_uid IN ($priestid)");
+	// Fetch next row as an associative array.
+    $record = $select_priestuser_id->fetchAll();
+	foreach($record as $priest_ids) {
+		
+	  db_query("DELETE  FROM node where nid IN ($priest_ids->entity_id)");
+	}
+	
+	
+	
+	
+}
+function cancel_event() {
+	
+	drupal_goto("priest-scheduler/reports/delete");
+}
+
+function temple_priest_views_query_alter(&$view, &$query) {
+  global $user;
+  if ($view->name == 'pooja_price_list' && $view->current_display == 'page') {
+    if (in_array('pos user', $user->roles)) {
+      $query->where[1]['conditions'][3] = array(
+        'field' => 'field_data_field_display_on_kiosk.field_display_on_kiosk_value',
+        'value' => 'kiosk',
+        'operator' => '='
+      );
+    }
+  }
+}
+function temple_priest_commerce_checkout_router($order, $checkout_page) {
+ /* global $user;
+  
+  $wrapper = entity_metadata_wrapper('commerce_order', $order);
+  
+  $order_lead_time = 0;
+  $products = array();
+  foreach ($order->commerce_line_items as $delta => $line_item) {
+     $line_item = commerce_line_item_load($line_item[0]['line_item_id']);
+     $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+	 
+	 echo "<pre>";
+	 print_r(line_item);
+	 //$sku[$line_item->order_id] = $line_item->line_item_label;
+     $sku = $line_item->line_item_label;	
+	 $wrapper = entity_metadata_wrapper('commerce_order', $sku);
+	exit(); 
+  }
+ 
+  $result = db_query('SELECT * FROM {commerce_orders} WHERE sku = :sku', array(':sku' => $sku));
+  foreach ($result as $record) {
+	  echo "<pre>";
+	  print_r($record);
+  }
+ // exit();  
+  if ($match_id = db_query('SELECT product_id FROM {commerce_product} WHERE sku = :sku', array(':sku' => $sku))->fetchField()) {
+	  echo "<pre>";
+	  print_r($match_id);
+    // If this SKU is supposed to be for a new product or a product other than
+    // the one that matched...
+    /*if (empty($product_id) || $match_id != $product_id) {
+      return FALSE;
+    }*/
+ // }
+
+  //return TRUE;
+// echo "<pre>";
+  //exit();
+  // Redirect anonymous users to a custom login page instructing them to login
+  // prior to checkout. (Note that Drupal Commerce does not require users to
+  // login prior to checkout as an e-commerce best practice.)
+ /* if (!$sku) {
+    drupal_set_message(t('This hall is already booked for this date'));
+    drupal_goto('cart');
+  }*/
+}
+
+function temple_priest_form_commerce_cart_add_to_cart_form_alter(&$form, &$form_state) {
+  //echo "<pre>"; print_r($form);  echo "</pre>";
+  if ((isset($form["#commerce_custom_product_line_item_form_state"]) 
+      && isset($form["#commerce_custom_product_line_item_form_state"]["default_product"]) 
+      && $form["#commerce_custom_product_line_item_form_state"]["default_product"]->type == "canteen") 
+      || (isset($form["product_id"]) && isset($form["product_id"]['#type']) && $form["product_id"]['#type'] == "select")) {
+      foreach($form["product_id"]["#options"] as $product_id => $row) {
+        $product = commerce_product_load($product_id);
+        $price = commerce_product_calculate_sell_price($product);
+        $price_display = commerce_currency_format($price['amount'], $price['currency_code'], $product);
+        $form["product_id"]["#options"][$product_id] = $row . ' - ' . $price_display;
+      } 
+  }
+}
+
+
+function temple_priest_block_info() {
+  $blocks = array();
+  $blocks['pooja_booking'] = array(
+    'info' => t('Pooja Booking block'),
+  );
+
+  return $blocks;
+}
+
+/**
+* Implements hook_block_view().
+*/
+function temple_priest_block_view($delta = '') {
+  $block = array();
+
+  switch ($delta) {
+    case 'pooja_booking':
+      $block['subject'] = '';
+      $block['content'] = Pooja_booking_content();
+      break;
+  }
+
+  return $block;
+}
+
+function Pooja_booking_content() {
+  $output = '<a href="http://qa.it-seva.in/services/pooja"><img alt="" src="http://qa.it-seva.in/sites/all/themes/balajitemple/images/pooja.jpg" /></a>';
+  return $output;
+}
+ /*   
+function temple_priest_commerce_checkout_complete($order) {  
+echo "<pre>";
+print_r($order); exit();  
+}*/  
+function temple_home() {
+  return "";
+}
+         
